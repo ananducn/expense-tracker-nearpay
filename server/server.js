@@ -14,28 +14,35 @@ dotenv.config();
 
 const app = express();
 
-// If running behind a proxy (e.g. in production), trust first proxy so secure cookies work
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
 // Middleware
 app.use(cookieParser());
-
-// CORS: allow credentials (cookies) and configure origin
-
-const allowedOrigin = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
-app.use(
-  cors({
-    origin: allowedOrigin,
-    credentials: true,
-  })
-);
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// DB
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
+
+app.use(
+  cors({
+    origin: FRONTEND_ORIGIN,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Accept",
+      "X-Requested-With",
+    ],
+
+    exposedHeaders: ["Content-Length", "X-Kuma-Revision"],
+  })
+);
+
+app.options("*", cors({ origin: FRONTEND_ORIGIN, credentials: true }));
+
 connectDB();
 
 // Routes
@@ -44,7 +51,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/budgets", budgetRoutes);
 app.use("/api/expenses", expenseRoutes);
 
-// Error handler (must be after routes)
+// Error handler
 app.use(errorHandler);
 
 // Start server

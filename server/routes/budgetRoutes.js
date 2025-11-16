@@ -10,8 +10,8 @@ const router = express.Router();
 
 router.use(protect);
 
-router.get("/", getBudgets);
-router.post("/", upsertBudget);
-router.delete("/:id", deleteBudget);
+router.get("/getBudgets", getBudgets);
+router.post("/upsertBudget", upsertBudget);
+router.delete("/deleteBudget/:id", deleteBudget);
 
 export default router;

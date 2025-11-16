@@ -1,67 +1,141 @@
-import React, { useEffect, useState } from 'react';
-import { useCategoryStore } from '../stores/categoryStore';
-import { useBudgetStore } from '../stores/budgetStore';
-import { useExpenseStore } from '../stores/expenseStore';
-import { useUiStore } from '../stores/uiStore';
-import ExpenseForm from '../components/ExpenseForm';
-import { useAuthStore } from '../stores/authStore';
+// src/pages/Dashboard.jsx
+import React, { useEffect, useState } from "react";
+import Sidebar from "../components/Sidebar";
+import Header from "../components/Header";
+import BudgetCard from "../components/BudgetCard";
+import ExpenseListModal from "../components/ExpenseListModal"; // NEW
+import { useBudgetStore } from "../stores/budgetStore";
+import { getMonthString } from "../utils/getMonthString";
+import AddExpenseModal from "../components/AddExpenseModal";
+import { useUiStore } from "../stores/uiStore";
 
-export default function Dashboard(){
-  const { categories, fetchCategories } = useCategoryStore();
-  const { fetchBudgets, budgets } = useBudgetStore();
-  const { fetchExpenses, expenses } = useExpenseStore();
-  const { isExpenseModalOpen, openExpenseModal, closeExpenseModal, toast } = useUiStore();
-  const [month, setMonth] = useState(new Date().toISOString().slice(0,7));
-  const logout = useAuthStore(s=>s.logout);
+export default function Dashboard() {
+  const { budgets, fetchBudgets, loading } = useBudgetStore();
+  const openExpenseModal = useUiStore((s) => s.openExpenseModal);
 
-  useEffect(()=>{ fetchCategories(); fetchBudgets(month); fetchExpenses(month); }, [month]);
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}`;
+  });
+
+  // NEW — state for clicked category
+  const [selectedCategoryId, setSelectedCategoryId] = useState(null);
+  const [isExpenseListOpen, setIsExpenseListOpen] = useState(false);
+
+  // fetch budgets on load + when month changes
+  useEffect(() => {
+    fetchBudgets(currentMonth).catch(() => {});
+  }, [currentMonth]);
+
+  const nextMonth = () => {
+    const [year, month] = currentMonth.split("-").map(Number);
+    const newMonth = month === 12 ? 1 : month + 1;
+    const newYear = month === 12 ? year + 1 : year;
+    setCurrentMonth(`${newYear}-${String(newMonth).padStart(2, "0")}`);
+  };
+
+  const prevMonth = () => {
+    const [year, month] = currentMonth.split("-").map(Number);
+    const newMonth = month === 1 ? 12 : month - 1;
+    const newYear = month === 1 ? year - 1 : year;
+    setCurrentMonth(`${newYear}-${String(newMonth).padStart(2, "0")}`);
+  };
+
+  // ——————— OPEN MODAL WHEN CARD CLICKED ———————
+  const openCategoryExpenses = (categoryId) => {
+    setSelectedCategoryId(categoryId);
+    setIsExpenseListOpen(true);
+  };
+
+  const closeCategoryExpenses = () => {
+    setSelectedCategoryId(null);
+    setIsExpenseListOpen(false);
+  };
 
   return (
-    <div style={{padding:20}}>
-      <header style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <h1 className='text-amber-300'>Expense Dashboard</h1>
-        <div>
-          <select value={month} onChange={e=>setMonth(e.target.value)}>
-            {/* show current and previous 3 months */}
-            {Array.from({length:4}).map((_,i)=>{
-              const d = new Date();
-              d.setMonth(d.getMonth()-i);
-              const val = d.toISOString().slice(0,7);
-              return <option key={val} value={val}>{val}</option>
-            })}
-          </select>
-          <button  onClick={openExpenseModal} style={{marginLeft:10}}>Add Expense</button>
-          <button onClick={()=>{logout();window.location.reload();}} style={{marginLeft:10}}>Logout</button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50 flex">
+      <Sidebar />
+      <div className="flex-1 flex flex-col">
+        <Header />
 
-      <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginTop:20}}>
-        {categories.map(cat => {
-          const bud = budgets.find(b=>b.category && b.category._id === cat._id);
-          const spent = expenses.filter(e=> e.category && e.category._id === cat._id).reduce((s,ex)=>s+Number(ex.amount||0),0);
-          const limit = bud ? bud.limit : 0;
-          const remaining = limit - spent;
-          return (
-            <div key={cat._id} style={{border:'1px solid #ddd',padding:12,borderRadius:8}}>
-              <h3>{cat.name}</h3>
-              <div>Spent: {spent}</div>
-              <div>Limit: {limit}</div>
-              <div style={{color: remaining<0?'red':'green'}}>Remaining: {remaining}</div>
+        <main className="p-6">
+          <div className="max-w-full mx-auto space-y-6">
+            {/* month header */}
+            <div className="bg-white rounded-lg p-6 shadow-sm border flex items-center justify-between">
+              <button
+                className="px-3 py-2 rounded-md text-3xl cursor-pointer"
+                onClick={prevMonth}
+              >
+                ‹
+              </button>
+
+              <h2 className="font-semibold text-lg">
+                {getMonthString(currentMonth)}
+              </h2>
+
+              <button
+                className="px-3 py-2 rounded-md text-3xl cursor-pointer"
+                onClick={nextMonth}
+              >
+                ›
+              </button>
             </div>
-          )
-        })}
-      </section>
 
-      {isExpenseModalOpen && (
-        <div style={{position:'fixed',left:0,top:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.4)'}}>
-          <div style={{background:'#fff',padding:20,width:420}}>
-            <button  onClick={closeExpenseModal} style={{float:'right'}}>Close</button>
-            <ExpenseForm onClose={closeExpenseModal}/>
+            {/* loading */}
+            {loading && (
+              <div className="text-center text-slate-500">Loading budgets…</div>
+            )}
+
+            {/* empty */}
+            {!loading && budgets.length === 0 && (
+              <div className="text-center text-slate-500 py-10">
+                No budgets found for this month. Add one!
+              </div>
+            )}
+
+            {/* grid */}
+            {!loading && budgets.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {budgets.map((b) => (
+                  <BudgetCard
+                    key={b._id}
+                    title={b.category?.name || "Unnamed Category"}
+                    color={b.category?.color ? b.category.color : "bg-blue-500"}
+                    spent={b.totalSpent || 0}
+                    budget={b.limit}
+                    onClick={() => openCategoryExpenses(b.category?._id)} // NEW
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        </main>
 
-      {toast && <div style={{position:'fixed',right:20,bottom:20,background:toast.type==='error'?'#f8d7da':'#d1e7dd',padding:12,borderRadius:6}}>{toast.message}</div>}
+        <AddExpenseModal />
+      </div>
+
+      {/* floating quick add */}
+      <div className="pt-4">
+        <div className="flex justify-end">
+          <button
+            onClick={openExpenseModal}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white shadow fixed bottom-12 right-6 cursor-pointer"
+          >
+            + Add Expense
+          </button>
+        </div>
+      </div>
+
+      {/* ——————— EXPENSE LIST MODAL ——————— */}
+      <ExpenseListModal
+        isOpen={isExpenseListOpen}
+        onClose={closeCategoryExpenses}
+        categoryId={selectedCategoryId}
+        month={currentMonth}
+      />
     </div>
   );
 }

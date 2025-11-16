@@ -1,3 +1,4 @@
+// src/stores/authStore.js
 import { create } from "zustand";
 import api from "../api/apiClient";
 
@@ -5,13 +6,22 @@ export const useAuthStore = create((set) => ({
   user: null,
   loading: false,
   error: null,
+  authChecked: false,
 
   setAuth: (user) => set({ user, error: null }),
 
-  signup: async ({name, email, password }) => {
+  // mark initial auth check as done
+  markAuthChecked: (val = true) => set({ authChecked: val }),
+
+  signup: async ({ fullName, email, password }) => {
     set({ loading: true, error: null });
     try {
-      const { data } = await api.post("/auth/signup", { email, password });
+      const { data } = await api.post("/auth/signup", {
+        fullName,
+        email,
+        password,
+      });
+
       set({ user: data.user, loading: false });
       return data;
     } catch (err) {
@@ -27,7 +37,7 @@ export const useAuthStore = create((set) => ({
     set({ loading: true, error: null });
     try {
       const { data } = await api.post("/auth/login", { email, password });
-      set({ user: data.user, loading: false }); // token is already in cookie
+      set({ user: data.user, loading: false });
       return data;
     } catch (err) {
       set({
@@ -40,10 +50,11 @@ export const useAuthStore = create((set) => ({
 
   logout: async () => {
     try {
-      await api.post("/auth/logout"); // clears cookie on server
+      await api.post("/auth/logout");
     } catch (e) {
       console.log("Logout error:", e);
+    } finally {
+      set({ user: null });
     }
-    set({ user: null });
   },
 }));

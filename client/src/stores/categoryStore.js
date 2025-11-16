@@ -36,7 +36,7 @@ export const useCategoryStore = create((set, get) => ({
   updateCategory: async (id, payload) => {
     set({ loading: true });
     try {
-      const { data } = await api.put(`/categories/${id}`, payload);
+      const { data } = await api.put(`/categories/updateCategories/${id}`, payload);
       set((s) => ({
         categories: s.categories.map((c) => (c._id === id ? data : c)),
         loading: false,
@@ -51,7 +51,7 @@ export const useCategoryStore = create((set, get) => ({
     const prev = get().categories;
     set((s) => ({ categories: s.categories.filter((c) => c._id !== id) }));
     try {
-      await api.delete(`/categories/${id}`);
+      await api.delete(`/categories/deleteCategories/${id}`);
       return true;
     } catch (err) {
       set({ categories: prev });

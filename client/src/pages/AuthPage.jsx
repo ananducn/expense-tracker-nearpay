@@ -37,9 +37,7 @@ export default function AuthPage() {
         // send name as part of signup body
         await signup({ email, password, fullName });
       }
-      // success -> auth store will update and App will switch views
     } catch (err) {
-      // Axios error shape: err.response?.data?.message
       setErrorMsg(
         err?.response?.data?.message ||
           err?.message ||

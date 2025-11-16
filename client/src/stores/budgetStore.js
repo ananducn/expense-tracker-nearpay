@@ -8,7 +8,7 @@ export const useBudgetStore = create((set) => ({
   fetchBudgets: async (month) => {
     set({ loading: true });
     try {
-      const { data } = await api.get('/budgets', { params: { month }});
+      const { data } = await api.get('/budgets/getBudgets', { params: { month }});
       set({ budgets: data, loading: false });
       return data;
     } catch (err) {
@@ -19,7 +19,7 @@ export const useBudgetStore = create((set) => ({
   upsertBudget: async ({ categoryId, month, limit }) => {
     set({ loading: true });
     try {
-      const { data } = await api.post('/budgets', { categoryId, month, limit });
+      const { data } = await api.post('/budgets/upsertBudget', { categoryId, month, limit });
       set((s) => {
         const exists = s.budgets.find(b => b._id === data._id);
         return { budgets: exists ? s.budgets.map(b => b._id === data._id ? data : b) : [data, ...s.budgets], loading: false };
