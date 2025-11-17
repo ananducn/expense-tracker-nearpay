@@ -2,23 +2,55 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import api from "../api/apiClient";
+import { useExpenseStore } from "../stores/expenseStore";
+import EditExpenseModal from "../components/EditExpenseModal";
 import { format } from "date-fns";
 import { useUiStore } from "../stores/uiStore";
 
-function ExpenseRow({ e, onDelete }) {
+function ExpenseRow({ e, onDelete, onEdit }) {
+  const catName = e.category?.name ?? "Uncategorized";
+  const catColor = e.category?.color ?? "#CBD5E1"; // fallback light slate
+
   return (
     <div className="flex items-center justify-between gap-4 p-3 border-b">
-      <div>
-        <div className="text-sm text-slate-500">{e.notes || "—"}</div>
-        <div className="text-xs text-slate-400">
-          {format(new Date(e.date), "PPpp")}
+      <div className="flex items-start gap-3 min-w-0">
+        {/* category dot + name */}
+        <div className="flex-shrink-0 mt-0.5">
+          <span
+            className="inline-block h-3 w-3 rounded-full"
+            style={{ background: catColor }}
+            aria-hidden
+          />
+        </div>
+
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium text-slate-700 truncate">
+              {catName}
+            </div>
+            <div className="text-xs text-slate-400">•</div>
+            <div className="text-sm text-slate-500 truncate">
+              {e.notes || "—"}
+            </div>
+          </div>
+          <div className="text-xs text-slate-400 mt-1">
+            {format(new Date(e.date), "PPpp")}
+          </div>
         </div>
       </div>
+
       <div className="flex items-center gap-3">
         <div className="text-lg font-medium">
           ${Number(e.amount).toFixed(2)}
         </div>
+
+        <button
+          onClick={() => onEdit && onEdit(e)}
+          className="text-slate-600 text-sm px-2 py-1 rounded hover:bg-slate-100"
+        >
+          Edit
+        </button>
+
         <button
           onClick={() => onDelete(e._id)}
           className="text-red-500 text-sm px-2 py-1 rounded hover:bg-red-50"
@@ -46,69 +78,47 @@ export default function Expenses() {
   const [rangeStart, setRangeStart] = useState(todayYMD);
   const [rangeEnd, setRangeEnd] = useState(todayYMD);
 
-  const [expenses, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(false);
-
   // client controls
-  const [sortMode, setSortMode] = useState("date_desc"); // date_desc, date_asc, amount_desc, amount_asc
-  const [query, setQuery] = useState(""); // text search in notes
+  const [sortMode, setSortMode] = useState("date_desc");
+  const [query, setQuery] = useState("");
   const [pageSize, setPageSize] = useState(25);
   const [visibleCount, setVisibleCount] = useState(25);
 
-  // fetch function
-  const fetchForMonth = async (month) => {
-    setLoading(true);
-    try {
-      const { data } = await api.get("/expenses/getExpenses", {
-        params: { month },
-      });
-      setExpenses(data || []);
-    } catch (err) {
-      console.error("fetchForMonth failed:", err);
-      showToast({
-        type: "error",
-        message: err?.response?.data?.message || "Failed to load expenses",
-      });
-      setExpenses([]);
-    } finally {
-      setLoading(false);
-      setVisibleCount(pageSize);
-    }
-  };
+  // Use store
+  const expenses = useExpenseStore((s) => s.expenses);
+  const loading = useExpenseStore((s) => s.loading);
+  const fetchExpenses = useExpenseStore((s) => s.fetchExpenses);
+  const fetchExpensesRange = useExpenseStore((s) => s.fetchExpensesRange);
+  const deleteExpense = useExpenseStore((s) => s.deleteExpense);
 
-  const fetchForRange = async (start, end) => {
-    setLoading(true);
-    try {
-      const { data } = await api.get("/expenses/range", {
-        params: { start, end },
-      });
-      setExpenses(data || []);
-    } catch (err) {
-      console.error("fetchForRange failed:", err);
-      showToast({
-        type: "error",
-        message: err?.response?.data?.message || "Failed to load expenses",
-      });
-      setExpenses([]);
-    } finally {
-      setLoading(false);
-      setVisibleCount(pageSize);
-    }
-  };
+  // editing modal state
+  const [editingExpense, setEditingExpense] = useState(null);
 
+  // fetch default month on mount
   useEffect(() => {
-    // fetch default month on mount
-    fetchForMonth(currentMonth);
+    // eslint-disable-next-line no-unused-expressions
+    fetchExpenses &&
+      fetchExpenses(currentMonth).catch((err) => {
+        showToast({
+          type: "error",
+          message: err?.response?.data?.message || "Failed to load expenses",
+        });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // handlers for month navigation
+  // month navigation helpers
   const nextMonth = () => {
     const [y, m] = currentMonth.split("-").map(Number);
     const newM = m === 12 ? 1 : m + 1;
     const newY = m === 12 ? y + 1 : y;
     const nm = `${newY}-${String(newM).padStart(2, "0")}`;
     setCurrentMonth(nm);
-    if (mode === "month") fetchForMonth(nm);
+    if (mode === "month" && fetchExpenses) {
+      fetchExpenses(nm).catch(() => {
+        showToast({ type: "error", message: "Failed to load month" });
+      });
+    }
   };
 
   const prevMonth = () => {
@@ -117,11 +127,14 @@ export default function Expenses() {
     const newY = m === 1 ? y - 1 : y;
     const nm = `${newY}-${String(newM).padStart(2, "0")}`;
     setCurrentMonth(nm);
-    if (mode === "month") fetchForMonth(nm);
+    if (mode === "month" && fetchExpenses) {
+      fetchExpenses(nm).catch(() => {
+        showToast({ type: "error", message: "Failed to load month" });
+      });
+    }
   };
 
   const applyRange = () => {
-    // validate
     const s = new Date(rangeStart);
     const e = new Date(rangeEnd);
     if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) {
@@ -129,25 +142,37 @@ export default function Expenses() {
     }
     if (s > e)
       return showToast({ type: "error", message: "Start must be <= End" });
+
     setMode("range");
-    fetchForRange(rangeStart, rangeEnd);
+    if (fetchExpensesRange) {
+      fetchExpensesRange(rangeStart, rangeEnd).catch(() => {
+        showToast({ type: "error", message: "Failed to load range" });
+      });
+    } else {
+      showToast({ type: "error", message: "Range fetch not available" });
+    }
   };
 
   const switchToMonth = (m) => {
     setMode("month");
     setCurrentMonth(m);
-    fetchForMonth(m);
+    if (fetchExpenses) {
+      fetchExpenses(m).catch(() => {
+        showToast({ type: "error", message: "Failed to load month" });
+      });
+    }
   };
 
-  // delete handler (calls API)
   const handleDelete = async (id) => {
     if (!confirm("Delete this expense?")) return;
     try {
-      await api.delete(`/expenses/deleteExpense/${id}`);
+      await deleteExpense(id);
       showToast({ type: "success", message: "Expense deleted" });
-      // refresh current view
-      if (mode === "month") fetchForMonth(currentMonth);
-      else fetchForRange(rangeStart, rangeEnd);
+      // store already removed it optimistically; to be safe, refetch
+      if (mode === "month" && fetchExpenses)
+        fetchExpenses(currentMonth).catch(() => {});
+      else if (mode === "range" && fetchExpensesRange)
+        fetchExpensesRange(rangeStart, rangeEnd).catch(() => {});
     } catch (err) {
       console.error("delete expense failed:", err);
       showToast({ type: "error", message: "Delete failed" });
@@ -283,7 +308,12 @@ export default function Expenses() {
 
               {!loading &&
                 visible.map((e) => (
-                  <ExpenseRow key={e._id} e={e} onDelete={handleDelete} />
+                  <ExpenseRow
+                    key={e._id}
+                    e={e}
+                    onDelete={handleDelete}
+                    onEdit={(exp) => setEditingExpense(exp)}
+                  />
                 ))}
 
               {!loading && visibleCount < filteredAndSorted.length && (
@@ -300,6 +330,21 @@ export default function Expenses() {
           </div>
         </main>
       </div>
+
+      {/* Edit modal */}
+      {editingExpense && (
+        <EditExpenseModal
+          expense={editingExpense}
+          onClose={() => {
+            setEditingExpense(null);
+            // refresh current view after edit
+            if (mode === "month" && fetchExpenses)
+              fetchExpenses(currentMonth).catch(() => {});
+            else if (mode === "range" && fetchExpensesRange)
+              fetchExpensesRange(rangeStart, rangeEnd).catch(() => {});
+          }}
+        />
+      )}
     </div>
   );
 }

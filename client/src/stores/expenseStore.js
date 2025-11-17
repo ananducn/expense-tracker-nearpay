@@ -1,3 +1,4 @@
+// src/stores/expenseStore.js
 import { create } from "zustand";
 import api from "../api/apiClient";
 import { useUiStore } from "./uiStore";
@@ -6,6 +7,8 @@ export const useExpenseStore = create((set, get) => ({
   expenses: [],
   loading: false,
   error: null,
+
+  // fetch by month (existing endpoint)
   fetchExpenses: async (month) => {
     set({ loading: true });
     try {
@@ -15,10 +18,55 @@ export const useExpenseStore = create((set, get) => ({
       set({ expenses: data, loading: false });
       return data;
     } catch (err) {
-      set({ error: err?.message, loading: false });
+      set({
+        error: err?.message || err?.response?.data?.message,
+        loading: false,
+      });
       throw err;
     }
   },
+
+  updateExpense: async (id, payload) => {
+    set({ loading: true });
+    try {
+      const { data } = await api.put(`/expenses/updateExpense/${id}`, payload);
+      const updated = data?.expense ?? data;
+      set((s) => ({
+        expenses: s.expenses.map((e) =>
+          String(e._id) === String(id) ? updated : e
+        ),
+        loading: false,
+      }));
+
+      const ui = useUiStore.getState();
+      ui.showToast({ type: "success", message: "Expense updated" });
+      return data;
+    } catch (err) {
+      set({ loading: false });
+      const msg =
+        err?.response?.data?.message || err?.message || "Update failed";
+      useUiStore.getState().showToast({ type: "error", message: msg });
+      throw err;
+    }
+  },
+
+  fetchExpensesRange: async (start, end) => {
+    set({ loading: true });
+    try {
+      const { data } = await api.get("/expenses/range", {
+        params: { start, end },
+      });
+      set({ expenses: data, loading: false });
+      return data;
+    } catch (err) {
+      set({
+        error: err?.message || err?.response?.data?.message,
+        loading: false,
+      });
+      throw err;
+    }
+  },
+
   addExpense: async (expensePayload) => {
     const tempId = `temp-${Date.now()}`;
     const tempExpense = {
@@ -30,8 +78,7 @@ export const useExpenseStore = create((set, get) => ({
 
     try {
       const { data } = await api.post("/expenses/addExpense", expensePayload);
-      // data.expense expected from server
-      const saved = data?.expense ?? data; // fallback if server returns raw expense
+      const saved = data?.expense ?? data;
       set((s) => ({
         expenses: s.expenses.map((e) => (e._id === tempId ? saved : e)),
       }));

@@ -176,6 +176,112 @@ export const deleteExpense = async (req, res) => {
   }
 };
 
+export const updateExpense = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidId(id))
+      return res.status(400).json({ message: "Invalid expense id" });
+
+    // normalize/validate user id
+    const rawUser = req.user;
+    if (!rawUser) return res.status(401).json({ message: "Unauthorized" });
+    const userIdStr = rawUser._id ? String(rawUser._id) : String(rawUser);
+    if (!isValidId(userIdStr))
+      return res.status(400).json({ message: "Invalid user id" });
+    const userId = new mongoose.Types.ObjectId(userIdStr);
+
+    // accept category or categoryId
+    const rawCategory = req.body.category ?? req.body.categoryId;
+    if (rawCategory && !isValidId(rawCategory)) {
+      return res
+        .status(400)
+        .json({ message: "category must be a valid ObjectId" });
+    }
+    const categoryId = rawCategory
+      ? new mongoose.Types.ObjectId(String(rawCategory))
+      : undefined;
+
+    // validate amount if provided
+    if (req.body.amount !== undefined) {
+      const amt = Number(req.body.amount);
+      if (Number.isNaN(amt) || amt <= 0)
+        return res
+          .status(400)
+          .json({ message: "amount must be a positive number" });
+    }
+
+    // validate date if provided
+    const dateRaw = req.body.date;
+    const dateObj = dateRaw ? new Date(dateRaw) : null;
+    if (dateRaw && Number.isNaN(dateObj.getTime()))
+      return res.status(400).json({ message: "invalid date" });
+
+    // find the expense and ensure it belongs to user
+    const expense = await Expense.findOne({ _id: id, user: userId });
+    if (!expense) return res.status(404).json({ message: "Expense not found" });
+
+    // build update object
+    const update = {};
+    if (req.body.amount !== undefined) update.amount = Number(req.body.amount);
+    if (req.body.notes !== undefined) update.notes = req.body.notes;
+    if (categoryId) update.category = categoryId;
+    if (dateObj) {
+      update.date = dateObj;
+      update.month = getMonthString(dateObj);
+    }
+
+    // apply update
+    const updated = await Expense.findOneAndUpdate(
+      { _id: id, user: userId },
+      { $set: update },
+      { new: true }
+    ).populate("category");
+
+    // Recompute budget summary for the (possibly new) month & category
+    const month = updated.month ?? getMonthString(updated.date);
+    const cat = updated.category ? updated.category._id : null;
+
+    let budgetSummary = { limit: 0, spent: 0, remaining: 0 };
+    let status = "WITHIN_BUDGET";
+
+    if (cat) {
+      const monthStart = new Date(`${month}-01T00:00:00.000Z`);
+      const monthEnd = new Date(monthStart);
+      monthEnd.setMonth(monthEnd.getMonth() + 1);
+
+      const budget = await Budget.findOne({
+        user: userId,
+        category: cat,
+        month,
+      });
+
+      if (budget) {
+        const expensesThisMonth = await Expense.aggregate([
+          {
+            $match: {
+              user: userId,
+              category: new mongoose.Types.ObjectId(cat),
+              date: { $gte: monthStart, $lt: monthEnd },
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]);
+        const spent = expensesThisMonth.length ? expensesThisMonth[0].total : 0;
+        const remaining = budget.limit - spent;
+        budgetSummary = { limit: budget.limit, spent, remaining };
+        if (remaining < 0) status = "OVER_BUDGET";
+      }
+    }
+
+    return res.json({ expense: updated, budget: budgetSummary, status });
+  } catch (err) {
+    console.error("updateExpense error:", err);
+    return res
+      .status(500)
+      .json({ message: "Failed to update expense", error: err.message });
+  }
+};
+
 export const getExpensesRange = async (req, res) => {
   try {
     const { start, end } = req.query;
