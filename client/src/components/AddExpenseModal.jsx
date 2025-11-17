@@ -11,20 +11,21 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
   const close = useUiStore((s) => s.closeExpenseModal);
   const showToast = useUiStore((s) => s.showToast);
 
-  // ===== useCategoryStore (call the hook directly) =====
   const categoriesFromStore = useCategoryStore((s) => s.categories);
   const fetchCategories = useCategoryStore((s) => s.fetchCategories);
 
-  // prefer categories prop if passed, otherwise categories from store
   const categories = categoriesProp ?? categoriesFromStore ?? [];
 
-  // expense / budget store helpers (if available)
-  // prefer store method that accepts { category, amount, date, month, notes }
+  //
   const addExpenseInStore = useExpenseStore
     ? useExpenseStore((s) => s.createExpense || s.addExpense)
     : null;
-  const fetchExpenses = useExpenseStore ? useExpenseStore((s) => s.fetchExpenses) : null;
-  const fetchBudgets = useBudgetStore ? useBudgetStore((s) => s.fetchBudgets) : null;
+  const fetchExpenses = useExpenseStore
+    ? useExpenseStore((s) => s.fetchExpenses)
+    : null;
+  const fetchBudgets = useBudgetStore
+    ? useBudgetStore((s) => s.fetchBudgets)
+    : null;
 
   // form state
   const today = new Date().toISOString().slice(0, 10); // yyyy-mm-dd
@@ -48,7 +49,11 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
 
   // When categories change, set default categoryId if none selected
   useEffect(() => {
-    if ((!categoryId || categoryId === "") && categories && categories.length > 0) {
+    if (
+      (!categoryId || categoryId === "") &&
+      categories &&
+      categories.length > 0
+    ) {
       setCategoryId(categories[0]._id);
     }
   }, [categories, categoryId]);
@@ -94,16 +99,12 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
         notes,
       };
 
-      // if store helper exists, prefer calling it with same payload shape
       if (addExpenseInStore) {
-        // try both possible arg shapes (some stores expect categoryId)
-        // so call with `payload` (category) — most robust
         await addExpenseInStore(payload);
       } else {
         await api.post("/expenses", payload);
       }
 
-      // refresh lists if stores expose fetch methods
       if (typeof fetchExpenses === "function") {
         try {
           await fetchExpenses(month);
@@ -114,9 +115,7 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
       if (typeof fetchBudgets === "function") {
         try {
           await fetchBudgets(month);
-        } catch (e) {
-          /* ignore */
-        }
+        } catch (e) {}
       }
 
       showToast({ type: "success", message: "Expense saved" });
@@ -143,11 +142,25 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-xl font-semibold">Add Expense</h3>
-            <p className="text-sm text-slate-500">Record a new expense and track your spending</p>
+            <p className="text-sm text-slate-500">
+              Record a new expense and track your spending
+            </p>
           </div>
-          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          <button
+            onClick={handleClose}
+            className="text-slate-400 hover:text-slate-600"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
             </svg>
           </button>
         </div>
@@ -155,7 +168,9 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           {/* Category */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Category
+            </label>
             <select
               className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200"
               value={categoryId}
@@ -172,7 +187,9 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
 
           {/* Amount */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Amount ($)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Amount ($)
+            </label>
             <input
               type="number"
               min="0"
@@ -186,7 +203,9 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
 
           {/* Date */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Date
+            </label>
             <input
               type="date"
               value={date}
@@ -197,7 +216,9 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
 
           {/* Notes */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Notes (optional)
+            </label>
             <input
               type="text"
               value={notes}
@@ -210,7 +231,11 @@ export default function AddExpenseModal({ categories: categoriesProp }) {
           {error && <div className="text-sm text-red-600">{error}</div>}
 
           <div className="flex items-center justify-end gap-3 pt-2">
-            <button type="button" onClick={handleClose} className="px-4 py-2 rounded-lg border">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 rounded-lg border"
+            >
               Cancel
             </button>
             <button
